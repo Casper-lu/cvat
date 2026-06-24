@@ -249,13 +249,14 @@ function buildDuplicatedAPI(prototype): void {
         }),
         frames: Object.freeze({
             value: {
-                async get(frame, isPlaying = false, step = 1) {
+                async get(frame, isPlaying = false, step = 1, quality = ChunkQuality.COMPRESSED) {
                     const result = await PluginRegistry.apiWrapper.call(
                         this,
                         prototype.frames.get,
                         frame,
                         isPlaying,
                         step,
+                        quality,
                     );
                     return result;
                 },
@@ -475,7 +476,7 @@ export class Session {
     };
 
     public frames: {
-        get: (frame: number, isPlaying?: boolean, step?: number) => Promise<FrameData>;
+        get: (frame: number, isPlaying?: boolean, step?: number, quality?: ChunkQuality) => Promise<FrameData>;
         delete: (frame: number) => Promise<void>;
         restore: (frame: number) => Promise<void>;
         save: () => Promise<FramesMetaData[]>;
@@ -586,6 +587,7 @@ export class Job extends Session {
         dimension?: DimensionType;
         media_type: MediaType;
         data_compressed_chunk_type?: ChunkType;
+        data_original_chunk_type?: ChunkType;
         data_chunk_size?: number;
         bug_tracker: string | null;
         mode?: TaskMode;
@@ -618,6 +620,7 @@ export class Job extends Session {
             dimension: undefined,
             media_type: undefined,
             data_compressed_chunk_type: undefined,
+            data_original_chunk_type: undefined,
             data_chunk_size: undefined,
             bug_tracker: null,
             mode: undefined,
@@ -641,6 +644,8 @@ export class Job extends Session {
         this.#data.media_type = initialData.media_type ?? this.#data.media_type;
         this.#data.data_compressed_chunk_type =
             initialData.data_compressed_chunk_type ?? this.#data.data_compressed_chunk_type;
+        this.#data.data_original_chunk_type =
+            initialData.data_original_chunk_type ?? this.#data.data_original_chunk_type;
         this.#data.data_chunk_size = initialData.data_chunk_size ?? this.#data.data_chunk_size;
         this.#data.mode = initialData.mode ?? this.#data.mode;
         this.#data.created_date = initialData.created_date ?? this.#data.created_date;
@@ -773,6 +778,10 @@ export class Job extends Session {
         return this.#data.data_compressed_chunk_type;
     }
 
+    public get dataOriginalChunkType(): ChunkType {
+        return this.#data.data_original_chunk_type;
+    }
+
     public get dataChunkSize(): number {
         return this.#data.data_chunk_size;
     }
@@ -874,6 +883,7 @@ export class Task extends Session {
     public readonly imageQuality: number;
     public readonly dataChunkSize: number;
     public readonly dataChunkType: ChunkType;
+    public readonly dataOriginalChunkType: ChunkType;
     public readonly dimension: DimensionType | undefined;
     public readonly mediaType: MediaType | undefined;
     public readonly progress: {
@@ -889,6 +899,8 @@ export class Task extends Session {
     public readonly stopFrame: number;
     public readonly frameFilter: string;
     public readonly useZipChunks: boolean;
+    public readonly smartResolution: boolean;
+    public readonly smartResolutionScale: number;
     public readonly useCache: boolean;
     public readonly copyData: boolean;
     public readonly cloudStorageId: number | null;
@@ -947,6 +959,8 @@ export class Task extends Session {
             stop_frame: undefined,
             frame_filter: undefined,
             use_zip_chunks: undefined,
+            smart_resolution: undefined,
+            smart_resolution_scale: undefined,
             use_cache: undefined,
             copy_data: undefined,
             sorting_method: undefined,
@@ -1131,6 +1145,12 @@ export class Task extends Session {
                 useZipChunks: {
                     get: () => data.use_zip_chunks,
                 },
+                smartResolution: {
+                    get: () => data.smart_resolution,
+                },
+                smartResolutionScale: {
+                    get: () => data.smart_resolution_scale,
+                },
                 useCache: {
                     get: () => data.use_cache,
                 },
@@ -1160,6 +1180,9 @@ export class Task extends Session {
                 },
                 dataChunkType: {
                     get: () => data.data_compressed_chunk_type,
+                },
+                dataOriginalChunkType: {
+                    get: () => data.data_original_chunk_type,
                 },
                 dimension: {
                     get: () => data.dimension,

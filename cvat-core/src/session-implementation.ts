@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: MIT
 
 import { omit } from 'lodash';
+import { ChunkQuality } from 'cvat-data';
 import config from './config';
 import { ArgumentError } from './exceptions';
 import {
@@ -188,6 +189,7 @@ export function implementJob(Job: typeof JobClass): typeof JobClass {
             frame: Parameters<typeof JobClass.prototype.frames.get>[0],
             isPlaying: Parameters<typeof JobClass.prototype.frames.get>[1],
             step: Parameters<typeof JobClass.prototype.frames.get>[2],
+            quality: Parameters<typeof JobClass.prototype.frames.get>[3],
         ): ReturnType<typeof JobClass.prototype.frames.get> {
             if (!Number.isInteger(frame) || frame < 0) {
                 throw new ArgumentError(`Frame must be a positive integer. Got: "${frame}"`);
@@ -207,7 +209,8 @@ export function implementJob(Job: typeof JobClass): typeof JobClass {
                 isPlaying,
                 step,
                 this.dimension,
-                (chunkIndex, quality) => this.frames.chunk(chunkIndex, quality),
+                quality || ChunkQuality.COMPRESSED,
+                (chunkIndex, requestedQuality) => this.frames.chunk(chunkIndex, requestedQuality),
             );
         },
     });
@@ -833,6 +836,8 @@ export function implementTask(Task: typeof TaskClass): typeof TaskClass {
             const taskDataSpec = {
                 image_quality: this.imageQuality,
                 use_zip_chunks: this.useZipChunks,
+                smart_resolution: this.smartResolution,
+                smart_resolution_scale: this.smartResolutionScale,
                 use_cache: this.useCache,
                 sorting_method: this.sortingMethod,
                 client_files: fields?.clientFiles ?? [],
@@ -954,6 +959,7 @@ export function implementTask(Task: typeof TaskClass): typeof TaskClass {
             frame: Parameters<typeof TaskClass.prototype.frames.get>[0],
             isPlaying: Parameters<typeof TaskClass.prototype.frames.get>[1],
             step: Parameters<typeof TaskClass.prototype.frames.get>[2],
+            quality: Parameters<typeof TaskClass.prototype.frames.get>[3],
         ): ReturnType<typeof TaskClass.prototype.frames.get> {
             if (!Number.isInteger(frame) || frame < 0) {
                 throw new ArgumentError(`Frame must be a positive integer. Got: "${frame}"`);
@@ -974,7 +980,8 @@ export function implementTask(Task: typeof TaskClass): typeof TaskClass {
                 isPlaying,
                 step,
                 this.dimension,
-                (chunkIndex, quality) => job.frames.chunk(chunkIndex, quality),
+                quality || ChunkQuality.COMPRESSED,
+                (chunkIndex, requestedQuality) => job.frames.chunk(chunkIndex, requestedQuality),
             );
             return result;
         },

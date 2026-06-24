@@ -301,6 +301,27 @@ export class FrameDecoder {
                 );
                 let index = 0;
 
+                // Read the MP4 track header BEFORE defining the worker callback so the
+                // exact display dimensions (written by PyAV, free of H.264 macroblock
+                // padding) are captured in the closure.  Broadway.js returns the CODED
+                // frame dimensions (rounded up to a macroblock boundary), not the display
+                // dimensions, so we must get the true content area from the container.
+                const reader = new MP4Reader(new Bytestream(block));
+                reader.read();
+                const video = reader.tracks[1];
+                let trakDisplayWidth: number | null = null;
+                let trakDisplayHeight: number | null = null;
+                const tkhd = video?.trak?.tkhd;
+                if (tkhd && Number.isFinite(tkhd.width) && Number.isFinite(tkhd.height)) {
+                    // tkhd.width/height are 16.16 fixed-point; Math.round gives the integer.
+                    const parsedWidth = Math.round(tkhd.width);
+                    const parsedHeight = Math.round(tkhd.height);
+                    if (parsedWidth > 0 && parsedHeight > 0) {
+                        trakDisplayWidth = parsedWidth;
+                        trakDisplayHeight = parsedHeight;
+                    }
+                }
+
                 this.videoWorker.onmessage = (e) => {
                     if (e.data.consoleLog) {
                         // ignore initialization message
@@ -309,19 +330,30 @@ export class FrameDecoder {
                     const keptIndex = index;
                     const frameNumber = getFrameNumber(keptIndex);
 
-                    // do not use e.data.height and e.data.width because they might be not correct
-                    // instead, try to understand real height and width of decoded image via scale factor
-                    const scaleFactor = Math.ceil(this.renderHeight / e.data.height);
-                    const height = Math.round(this.renderHeight / scaleFactor);
-                    const width = Math.round(this.renderWidth / scaleFactor);
+                    // e.data.width/height are H.264 coded dimensions (macroblock-padded).
+                    // Crop to the exact display dimensions from the MP4 track header so
+                    // LQ and HQ frames are always perfectly aligned.
+                    const contentWidth = Math.min(
+                        e.data.width,
+                        Math.max(1, trakDisplayWidth ?? e.data.width),
+                    );
+                    const contentHeight = Math.min(
+                        e.data.height,
+                        Math.max(1, trakDisplayHeight ?? e.data.height),
+                    );
 
+                    // Crop padding, then upscale to render dimensions.
                     createImageBitmap(FrameDecoder.cropImage(
                         e.data.buf,
                         e.data.width,
                         e.data.height,
-                        width,
-                        height,
-                    )).then((bitmap) => {
+                        contentWidth,
+                        contentHeight,
+                    ), {
+                        resizeWidth: this.renderWidth,
+                        resizeHeight: this.renderHeight,
+                        resizeQuality: 'pixelated',
+                    }).then((bitmap) => {
                         decodedFrames[frameNumber] = bitmap;
                         this.chunkIsBeingDecoded.onDecode(frameNumber, decodedFrames[frameNumber]);
 
@@ -349,10 +381,6 @@ export class FrameDecoder {
                         reuseMemory: false,
                     },
                 });
-
-                const reader = new MP4Reader(new Bytestream(block));
-                reader.read();
-                const video = reader.tracks[1];
 
                 const avc = reader.tracks[1].trak.mdia.minf.stbl.stsd.avc1.avcC;
                 const sps = avc.sps[0];

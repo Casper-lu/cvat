@@ -38,6 +38,7 @@ const frameDataCache: Record<string, {
     }>;
     getChunk: (chunkIndex: number, quality: ChunkQuality) => Promise<ArrayBuffer>;
     getMeta: () => Promise<FramesMetaData>;
+    chunkQuality: ChunkQuality;
 }> = {};
 
 // frame meta data storage by job id
@@ -515,12 +516,12 @@ Object.defineProperty(FrameData.prototype.data, 'implementation', {
                             };
 
                             frameDataCache[this.jobID].getChunk(
-                                nextChunkIndex, ChunkQuality.COMPRESSED,
+                                nextChunkIndex, frameDataCache[this.jobID].chunkQuality,
                             ).then((chunk: ArrayBuffer) => {
                                 if (!(this.jobID in frameDataCache)) {
                                     // check if frameDataCache still exist
                                     // as it may be released during chunk request
-                                    resolveForward();
+                                    releasePromise();
                                     return;
                                 }
 
@@ -578,7 +579,7 @@ Object.defineProperty(FrameData.prototype.data, 'implementation', {
                 ) => {
                     let wasResolved = false;
                     frameDataCache[this.jobID].getChunk(
-                        chunkIndex, ChunkQuality.COMPRESSED,
+                        chunkIndex, frameDataCache[this.jobID].chunkQuality,
                     ).then((chunk: ArrayBuffer) => {
                         try {
                             if (!(this.jobID in frameDataCache)) {
@@ -906,6 +907,7 @@ export async function getFrame(
     isPlaying: boolean,
     step: number,
     dimension: DimensionType,
+    quality: ChunkQuality,
     getChunk: (chunkIndex: number, quality: ChunkQuality) => Promise<ArrayBuffer>,
 ): Promise<FrameData> {
     const dataCacheExists = jobID in frameDataCache;
@@ -953,6 +955,7 @@ export async function getFrame(
             latestContextImagesRequest: null,
             contextCache: {},
             getChunk,
+            chunkQuality: quality,
             getMeta: () => {
                 const cached = frameMetaCache[jobID];
                 if (!(cached instanceof Promise)) {
@@ -961,6 +964,26 @@ export async function getFrame(
                 return cached;
             },
         };
+    } else if (frameDataCache[jobID].chunkQuality !== quality) {
+        // The compressed stream is MP4 video; the original stream is a ZIP image set.
+        // The FrameDecoder block type must match the chunk format — replace the decoder.
+        const newBlockType = quality === ChunkQuality.ORIGINAL ? BlockType.ARCHIVE : BlockType.MP4VIDEO;
+        const cached = frameDataCache[jobID];
+        cached.provider.close();
+        cached.provider = new FrameDecoder(
+            newBlockType,
+            cached.decodedBlocksCacheSize,
+            (frameNumber: number): number => {
+                const metaSync = frameMetaCacheSync[jobID];
+                if (!metaSync) throw new Error('Meta not cached');
+                return metaSync.getFrameChunkIndex(
+                    metaSync.getDataFrameNumber(frameNumber - cached.jobStartFrame),
+                );
+            },
+            dimension,
+        );
+        cached.chunkQuality = quality;
+        cached.activeChunkRequest = null;
     }
 
     // basically the following functions may be affected if job cache is outdated
