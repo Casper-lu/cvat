@@ -1076,15 +1076,25 @@ class ZipChunkWriter(IChunkWriter):
     ) -> None:
         with zipfile.ZipFile(chunk_path, "x") as zip_chunk:
             for idx, (image, path) in enumerate(images):
-                ext = os.path.splitext(path)[1].replace(".", "")
+                ext = os.path.splitext(path)[1].replace(".", "") if path else self.IMAGE_EXT
 
                 if self._dimension == DimensionType.DIM_2D:
+                    if isinstance(image, av.VideoFrame):
+                        output = io.BytesIO()
+                        frame_image = image.to_image()
+                        frame_image.save(
+                            output,
+                            format=self.IMAGE_EXT,
+                            quality=100,
+                            subsampling=0,
+                        )
+                        ext = self.IMAGE_EXT
                     # current version of Pillow applies exif rotation immediately when TIFF image opened
                     # and it removes rotation tag after that
                     # so, has_exif_rotation(image) will return False for TIFF images even if they were actually rotated
                     # and original files will be added to the archive (without applied rotation)
                     # that is why we need the second part of the condition
-                    if isinstance(image, Image.Image) and (
+                    elif isinstance(image, Image.Image) and (
                         has_exif_rotation(image) or image.format == "TIFF"
                     ):
                         output = io.BytesIO()
@@ -1326,8 +1336,9 @@ class Mpeg4ChunkWriter(IChunkWriter):
 
 
 class Mpeg4CompressedChunkWriter(Mpeg4ChunkWriter):
-    def __init__(self, *, quality, dimension):
+    def __init__(self, *, quality, dimension, downscale_percent: int = 25):
         super().__init__(quality=quality, dimension=dimension)
+        self._downscale_percent = max(1, min(100, int(downscale_percent)))
 
         if self._codec_name == "libx264":
             self._codec_opts = {
@@ -1346,12 +1357,14 @@ class Mpeg4CompressedChunkWriter(Mpeg4ChunkWriter):
         input_w = first_frame[0].width
         input_h = first_frame[0].height
 
-        downscale_factor = 1
-        while input_h / downscale_factor >= 1080:
-            downscale_factor *= 2
+        output_h = max(1, input_h * self._downscale_percent // 100)
+        output_w = max(1, input_w * self._downscale_percent // 100)
 
-        output_h = input_h // downscale_factor
-        output_w = input_w // downscale_factor
+        # yuv420p requires even dimensions; odd sizes can introduce padded borders.
+        if output_w > 1 and output_w % 2:
+            output_w -= 1
+        if output_h > 1 and output_h % 2:
+            output_h -= 1
 
         with av.open(chunk_path, "w", format=self.FORMAT) as output_container:
             output_v_stream = self._add_video_stream(

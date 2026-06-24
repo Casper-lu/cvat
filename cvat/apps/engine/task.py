@@ -1256,10 +1256,19 @@ def _configure_chunk_types(db_task: models.Task, data: dict[str, Any]) -> None:
             db_data.compressed_chunk_type = models.DataChoice.AUDIO_MP3
             db_data.original_chunk_type = models.DataChoice.AUDIO_MP3
         case (models.MediaType.IMAGE, models.TaskMode.INTERPOLATION):
-            db_data.compressed_chunk_type = (
-                models.DataChoice.IMAGESET if data["use_zip_chunks"] else models.DataChoice.VIDEO
-            )
-            db_data.original_chunk_type = models.DataChoice.VIDEO
+            if data.get("smart_resolution", False):
+                # Smart dual-stream mode:
+                # COMPRESSED -> low-res non-zip video chunks, ORIGINAL -> zip chunks.
+                db_data.compressed_chunk_type = models.DataChoice.VIDEO
+                db_data.original_chunk_type = models.DataChoice.IMAGESET
+            else:
+                # Legacy behavior controlled by use_zip_chunks.
+                db_data.compressed_chunk_type = (
+                    models.DataChoice.IMAGESET
+                    if data["use_zip_chunks"]
+                    else models.DataChoice.VIDEO
+                )
+                db_data.original_chunk_type = models.DataChoice.VIDEO
         case (models.MediaType.IMAGE | models.MediaType.POINT_CLOUD, models.TaskMode.ANNOTATION):
             db_data.compressed_chunk_type = models.DataChoice.IMAGESET
             db_data.original_chunk_type = models.DataChoice.IMAGESET
@@ -2027,16 +2036,45 @@ def create_thread(
 
     db_task.save()
 
+    # Persist smart-resolution settings so on-demand chunk generation can use them later.
+    smart_resolution = data.get("smart_resolution", False)
+    smart_resolution_scale = data.get("smart_resolution_scale", 25)
+    _save_smart_resolution_config(db_data, smart_resolution=smart_resolution, smart_resolution_scale=smart_resolution_scale)
+
     if (
         settings.MEDIA_CACHE_ALLOW_STATIC_CACHE
         and db_data.storage_method == models.StorageMethodChoice.FILE_SYSTEM
     ):
-        _create_static_chunks(db_task, media_extractor=extractor, upload_dir=upload_dir)
+        _create_static_chunks(
+            db_task,
+            media_extractor=extractor,
+            upload_dir=upload_dir,
+            smart_resolution=smart_resolution,
+            smart_resolution_scale=smart_resolution_scale,
+        )
 
     if not (is_data_in_cloud and is_backup_restore):
         _create_task_preview(db_task)
 
     _move_to_backing_cs_if_configured(db_data)
+
+
+_SMART_RESOLUTION_CONFIG_FILENAME = "smart_resolution_config.json"
+
+
+def _save_smart_resolution_config(
+    db_data: models.Data,
+    *,
+    smart_resolution: bool,
+    smart_resolution_scale: int,
+) -> None:
+    import json as _json
+    config_path = db_data.get_data_dirname() / _SMART_RESOLUTION_CONFIG_FILENAME
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(_json.dumps({
+        "smart_resolution": smart_resolution,
+        "smart_resolution_scale": smart_resolution_scale,
+    }))
 
 
 def _create_task_preview(db_task: models.Task):
@@ -2051,7 +2089,12 @@ def _create_task_preview(db_task: models.Task):
 
 
 def _create_static_chunks(
-    db_task: models.Task, *, media_extractor: IMediaReader, upload_dir: Path
+    db_task: models.Task,
+    *,
+    media_extractor: IMediaReader,
+    upload_dir: Path,
+    smart_resolution: bool = False,
+    smart_resolution_scale: int = 25,
 ) -> None:
     @attrs.define
     class _ChunkProgressUpdater:
@@ -2134,9 +2177,16 @@ def _create_static_chunks(
         original_chunk_writer_class = ZipChunkWriter
         original_quality = 100
 
-    compressed_chunk_writer = compressed_chunk_writer_class(
-        quality=db_data.image_quality, dimension=db_task.dimension
-    )
+    compressed_chunk_writer_kwargs: dict[str, Any] = {
+        "quality": db_data.image_quality,
+        "dimension": db_task.dimension,
+    }
+    if compressed_chunk_writer_class is Mpeg4CompressedChunkWriter:
+        compressed_chunk_writer_kwargs["downscale_percent"] = (
+            smart_resolution_scale if smart_resolution else 100
+        )
+
+    compressed_chunk_writer = compressed_chunk_writer_class(**compressed_chunk_writer_kwargs)
     original_chunk_writer = original_chunk_writer_class(
         quality=original_quality, dimension=db_task.dimension
     )

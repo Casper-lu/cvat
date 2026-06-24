@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import io
 import itertools
+import json as _json
 import math
 from abc import ABCMeta, abstractmethod
 from bisect import bisect
@@ -50,6 +51,21 @@ from cvat.apps.engine.media_io.media_provider import (
 )
 from cvat.apps.engine.mime_types import mimetypes
 from cvat.apps.engine.utils import take_by
+
+_SMART_RESOLUTION_CONFIG_FILENAME = "smart_resolution_config.json"
+
+
+def _load_smart_resolution_scale(db_data: models.Data) -> int:
+    """Return the configured low-res scale percent (1-100) for a task's Data object.
+    Falls back to 100 when no config file is present (legacy tasks)."""
+    config_path = db_data.get_data_dirname() / _SMART_RESOLUTION_CONFIG_FILENAME
+    try:
+        cfg = _json.loads(config_path.read_text())
+        if not cfg.get("smart_resolution", True):
+            return 100  # smart resolution disabled → full size
+        return max(1, min(100, int(cfg.get("smart_resolution_scale", 25))))
+    except (FileNotFoundError, ValueError, KeyError):
+        return 100  # legacy default (preserve existing behavior)
 
 _ReaderFactory: TypeAlias = Callable[[BytesIO], IMediaReader]
 
@@ -805,7 +821,10 @@ def prepare_image_chunk(
     writer_class = writer_classes[quality]
 
     image_quality = 100 if quality == models.FrameQuality.ORIGINAL else db_data.image_quality
-    writer = writer_class(quality=image_quality, dimension=db_task.dimension)
+    writer_init_kwargs: dict = {"quality": image_quality, "dimension": db_task.dimension}
+    if writer_class is Mpeg4CompressedChunkWriter:
+        writer_init_kwargs["downscale_percent"] = _load_smart_resolution_scale(db_data)
+    writer = writer_class(**writer_init_kwargs)
 
     writer_kwargs = {}
     if dump_unchanged and isinstance(writer, ZipCompressedChunkWriter):

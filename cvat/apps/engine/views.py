@@ -1436,6 +1436,8 @@ class TaskViewSet(
                     )
 
                 data["use_zip_chunks"] = serializer.validated_data["use_zip_chunks"]
+                data["smart_resolution"] = serializer.validated_data.get("smart_resolution", False)
+                data["smart_resolution_scale"] = serializer.validated_data.get("smart_resolution_scale", 25)
                 data["use_cache"] = serializer.validated_data["use_cache"]
                 data["copy_data"] = serializer.validated_data["copy_data"]
 

@@ -2575,6 +2575,21 @@ class DataSerializer(serializers.ModelSerializer):
             When false, video chunks are represented as video segments
         """),
     )
+    smart_resolution = serializers.BooleanField(
+        default=False,
+        help_text=textwrap.dedent("""\
+            Enable smart dual-stream mode for videos:
+            compressed chunks are low-resolution video segments,
+            original chunks are high-detail ZIP image chunks.
+        """),
+    )
+    smart_resolution_scale = serializers.IntegerField(
+        min_value=1,
+        max_value=100,
+        required=False,
+        default=25,
+        help_text="Low-resolution scale percentage for smart resolution mode",
+    )
     client_files = ClientFileSerializer(
         many=True,
         default=[],
@@ -2690,6 +2705,8 @@ class DataSerializer(serializers.ModelSerializer):
             "server_files",
             "remote_files",
             "use_zip_chunks",
+            "smart_resolution",
+            "smart_resolution_scale",
             "server_files_exclude",
             "cloud_storage_id",
             "use_cache",
@@ -2833,7 +2850,13 @@ class DataSerializer(serializers.ModelSerializer):
         validated_data.pop("upload_file_order", None)  # optional, not present in Data
         validated_data.pop("server_files_exclude", None)  # optional, not present in Data
 
-        for extra_key in {"use_zip_chunks", "use_cache", "copy_data"}:
+        for extra_key in {
+            "use_zip_chunks",
+            "smart_resolution",
+            "smart_resolution_scale",
+            "use_cache",
+            "copy_data",
+        }:
             validated_data.pop(extra_key)
 
         files = {
