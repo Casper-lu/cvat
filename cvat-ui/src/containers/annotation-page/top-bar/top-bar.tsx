@@ -37,7 +37,7 @@ import {
 } from 'reducers';
 import isAbleToChangeFrame from 'utils/is-able-to-change-frame';
 import { KeyMap } from 'utils/mousetrap-react';
-import { switchToolsBlockerState } from 'actions/settings-actions';
+import { changeFrameQuality, switchToolsBlockerState } from 'actions/settings-actions';
 import { writeLatestFrame } from 'utils/remember-latest-frame';
 import { finishDraw } from 'utils/drawing';
 import { toClipboard } from 'utils/to-clipboard';
@@ -52,6 +52,8 @@ interface StateToProps {
     frameFilename: string;
     frameStep: number;
     frameSpeed: FrameSpeed;
+    frameQuality: 'compressed' | 'original';
+    smartResolutionAvailable: boolean;
     frameDelay: number;
     frameFetching: boolean;
     playing: boolean;
@@ -77,8 +79,15 @@ interface StateToProps {
 }
 
 interface DispatchToProps {
-    onChangeFrame(frame: number, fillBuffer?: boolean, frameStep?: number): void;
+    onChangeFrame(
+        frame: number,
+        fillBuffer?: boolean,
+        frameStep?: number,
+        forceUpdate?: boolean,
+        quality?: 'compressed' | 'original',
+    ): void;
     onSwitchPlay(playing: boolean): void;
+    onChangeFrameQuality(frameQuality: 'compressed' | 'original'): void;
     switchShowSearchPallet(visible: boolean): void;
     onSaveAnnotation(): void;
     showStatistics(sessionInstance: Job): void;
@@ -129,12 +138,22 @@ function mapStateToProps(state: CombinedState): StateToProps {
                 history,
                 filters: annotationFilters,
             },
-            job: { instance: jobInstance, queryParameters: { initialOpenGuide }, meta },
+            job: {
+                instance: jobInstance,
+                queryParameters: { initialOpenGuide },
+                meta,
+                smartResolutionAvailable,
+            },
             canvas: { ready: canvasIsReady, instance: canvasInstance, activeControl },
             workspace,
         },
         settings: {
-            player: { frameSpeed, frameStep, showDeletedFrames },
+            player: {
+                frameSpeed,
+                frameStep,
+                frameQuality,
+                showDeletedFrames,
+            },
             workspace: {
                 autoSave,
                 autoSaveInterval,
@@ -161,6 +180,8 @@ function mapStateToProps(state: CombinedState): StateToProps {
         frameSpeed,
         frameDelay,
         frameFetching,
+        frameQuality,
+        smartResolutionAvailable,
         playing,
         canvasIsReady,
         hoveredChapter,
@@ -190,11 +211,20 @@ function mapStateToProps(state: CombinedState): StateToProps {
 
 function mapDispatchToProps(dispatch: any): DispatchToProps {
     return {
-        onChangeFrame(frame: number, fillBuffer?: boolean, frameStep?: number): void {
-            dispatch(changeFrameAsync(frame, fillBuffer, frameStep));
+        onChangeFrame(
+            frame: number,
+            fillBuffer?: boolean,
+            frameStep?: number,
+            forceUpdate?: boolean,
+            quality?: 'compressed' | 'original',
+        ): void {
+            dispatch(changeFrameAsync(frame, fillBuffer, frameStep, forceUpdate, quality));
         },
         onSwitchPlay(playing: boolean): void {
             dispatch(switchPlay(playing));
+        },
+        onChangeFrameQuality(frameQuality: 'compressed' | 'original'): void {
+            dispatch(changeFrameQuality(frameQuality));
         },
         onSaveAnnotation(): void {
             dispatch(saveAnnotationsAsync());
@@ -640,6 +670,29 @@ class AnnotationTopBarContainer extends React.PureComponent<Props> {
         toClipboard(frameFilename);
     };
 
+    private onToggleFrameQuality = (): void => {
+        const {
+            canvasInstance,
+            frameQuality,
+            frameNumber,
+            playing,
+            onSwitchPlay,
+            onChangeFrame,
+            onChangeFrameQuality,
+        } = this.props;
+
+        if (playing) {
+            onSwitchPlay(false);
+        }
+
+        const nextQuality = frameQuality === 'compressed' ? 'original' : 'compressed';
+        // Commit quality first (sync Redux dispatch), then force frame reload.
+        onChangeFrameQuality(nextQuality);
+        canvasInstance.configure({ forceFrameUpdate: true });
+        // Pass quality explicitly so changeFrameAsync doesn't need to read Redux state.
+        onChangeFrame(frameNumber, undefined, undefined, true, nextQuality);
+    };
+
     private onDeleteFrame = (): void => {
         const { deleteFrame, frameNumber } = this.props;
         deleteFrame(frameNumber);
@@ -713,6 +766,8 @@ class AnnotationTopBarContainer extends React.PureComponent<Props> {
             workspace,
             keyMap,
             ranges,
+            frameQuality,
+            smartResolutionAvailable,
             normalizedKeyMap,
             activeControl,
             annotationFilters,
@@ -745,6 +800,8 @@ class AnnotationTopBarContainer extends React.PureComponent<Props> {
                 onInputChange={this.onChangePlayerInputValue}
                 onURLIconClick={this.onURLIconClick}
                 onCopyFilenameIconClick={this.onCopyFilenameIconClick}
+                onToggleFrameQuality={this.onToggleFrameQuality}
+                smartResolutionAvailable={smartResolutionAvailable}
                 onDeleteFrame={this.onDeleteFrame}
                 onRestoreFrame={this.onRestoreFrame}
                 changeWorkspace={this.changeWorkspace}
@@ -763,6 +820,7 @@ class AnnotationTopBarContainer extends React.PureComponent<Props> {
                 frameNumber={frameNumber}
                 frameFilename={frameFilename}
                 frameDeleted={frameIsDeleted}
+                frameQuality={frameQuality}
                 inputFrameRef={this.inputFrameRef}
                 undoAction={undoAction}
                 redoAction={redoAction}

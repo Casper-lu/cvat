@@ -95,6 +95,7 @@ const defaultState: AnnotationState = {
         openTime: null,
         labels: [],
         requestedId: null,
+        smartResolutionAvailable: false,
         queryParameters: {
             initialOpenGuide: false,
             defaultLabel: null,
@@ -216,6 +217,7 @@ export default (state = defaultState, action: AnyAction): AnnotationState => {
                 job,
                 jobMeta,
                 openTime,
+                smartResolutionAvailable,
                 frameNumbers,
                 frameNumber: number,
                 frameFilename: filename,
@@ -269,6 +271,7 @@ export default (state = defaultState, action: AnyAction): AnnotationState => {
                 job: {
                     ...state.job,
                     openTime,
+                    smartResolutionAvailable,
                     frameNumbers,
                     fetching: false,
                     instance: job,

@@ -43,6 +43,8 @@ export interface AdvancedConfiguration {
     stopFrame?: number;
     frameFilter?: string;
     useZipChunks: boolean;
+    smartResolution: boolean;
+    smartResolutionScale?: number;
     dataChunkSize?: number;
     useCache: boolean;
     copyData?: boolean;
@@ -87,6 +89,8 @@ export const AUDIO_ADVANCED_CONFIGURATION_SECTIONS = [
 const initialValues: AdvancedConfiguration = {
     imageQuality: 70,
     useZipChunks: true,
+    smartResolution: false,
+    smartResolutionScale: 25,
     useCache: true,
     copyData: false,
     sortingMethod: SortingMethod.LEXICOGRAPHICAL,
@@ -384,6 +388,55 @@ class AdvancedConfigurationForm extends React.PureComponent<Props> {
         );
     }
 
+    private renderSmartResolution(): JSX.Element {
+        return (
+            <Space>
+                <Form.Item
+                    name='smartResolution'
+                    valuePropName='checked'
+                    className='cvat-settings-switch'
+                >
+                    <Switch />
+                </Form.Item>
+                <Text className='cvat-text-color'>Smart resolution</Text>
+                <Tooltip title='Enable dual-stream mode: compressed low-resolution video + original ZIP chunks for high detail'>
+                    <QuestionCircleOutlined style={{ opacity: 0.5 }} />
+                </Tooltip>
+            </Space>
+        );
+    }
+
+    private renderSmartResolutionScale(): JSX.Element {
+        return (
+            <CVATTooltip title='Target percentage for the low-resolution stream (e.g. 25 means 1/4 width and 1/4 height)'>
+                <Form.Item
+                    label='Low-res scale'
+                    name='smartResolutionScale'
+                    dependencies={['smartResolution']}
+                    rules={[
+                        {
+                            validator: (_, value): Promise<void> => {
+                                const smartResolution = this.formRef.current?.getFieldValue('smartResolution');
+                                if (!smartResolution) {
+                                    return Promise.resolve();
+                                }
+
+                                const intValue = Number(value);
+                                if (Number.isInteger(intValue) && intValue >= 1 && intValue <= 100) {
+                                    return Promise.resolve();
+                                }
+
+                                return Promise.reject(new Error('Value must be an integer from 1 to 100'));
+                            },
+                        },
+                    ]}
+                >
+                    <Input size='large' type='number' min={1} max={100} suffix={<PercentageOutlined />} />
+                </Form.Item>
+            </CVATTooltip>
+        );
+    }
+
     private renderCreateTaskMethod(): JSX.Element {
         return (
             <Space>
@@ -523,17 +576,19 @@ class AdvancedConfigurationForm extends React.PureComponent<Props> {
                 )}
                 {hasChunking && (
                     <Row>
-                        <Col span={12}>{this.renderUzeZipChunks()}</Col>
-                        <Col span={12}>{this.renderCreateTaskMethod()}</Col>
+                        <Col span={8}>{this.renderUzeZipChunks()}</Col>
+                        <Col span={8}>{this.renderSmartResolution()}</Col>
+                        <Col span={8}>{this.renderCreateTaskMethod()}</Col>
                     </Row>
                 )}
                 {hasImageQuality && (
                     <Row justify='start'>
-                        <Col span={7}>{this.renderImageQuality()}</Col>
-                        <Col span={7} offset={1}>
+                        <Col span={5}>{this.renderImageQuality()}</Col>
+                        <Col span={5} offset={1}>{this.renderSmartResolutionScale()}</Col>
+                        <Col span={5} offset={1}>
                             {this.renderOverlap()}
                         </Col>
-                        <Col span={7} offset={1}>
+                        <Col span={5} offset={1}>
                             {this.renderSegmentSize()}
                         </Col>
                     </Row>

@@ -70,8 +70,11 @@ interface Props {
     onInputChange(value: number): void;
     onURLIconClick(): void;
     onCopyFilenameIconClick(): void;
+    onToggleFrameQuality(): void;
     onUndoClick(): void;
     onRedoClick(): void;
+    frameQuality: 'compressed' | 'original';
+    smartResolutionAvailable: boolean;
     onFinishDraw(): void;
     onSwitchToolsBlockerState(): void;
     onDeleteFrame(): void;
@@ -114,6 +117,8 @@ export default function AnnotationTopBarComponent(props: Props): JSX.Element {
         annotationFilters,
         initialOpenGuide,
         navigationType,
+        frameQuality,
+        smartResolutionAvailable,
         jobInstance,
         keyMap,
         showStatistics,
@@ -134,6 +139,7 @@ export default function AnnotationTopBarComponent(props: Props): JSX.Element {
         onInputChange,
         onURLIconClick,
         onCopyFilenameIconClick,
+        onToggleFrameQuality,
         onUndoClick,
         onRedoClick,
         onFinishDraw,
@@ -198,6 +204,9 @@ export default function AnnotationTopBarComponent(props: Props): JSX.Element {
             onInputChange={onInputChange}
             onURLIconClick={onURLIconClick}
             onCopyFilenameIconClick={onCopyFilenameIconClick}
+            onToggleFrameQuality={onToggleFrameQuality}
+            frameQuality={frameQuality}
+            smartResolutionAvailable={smartResolutionAvailable}
             onDeleteFrame={onDeleteFrame}
             onRestoreFrame={onRestoreFrame}
             switchNavigationBlocked={switchNavigationBlocked}

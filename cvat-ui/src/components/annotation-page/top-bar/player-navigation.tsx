@@ -49,10 +49,13 @@ interface Props {
     onInputChange(value: number): void;
     onURLIconClick(): void;
     onCopyFilenameIconClick(): void;
+    onToggleFrameQuality(): void;
     onDeleteFrame(): void;
     onRestoreFrame(): void;
     switchNavigationBlocked(blocked: boolean): void;
     switchShowSearchPallet(visible: boolean): void;
+    frameQuality: 'compressed' | 'original';
+    smartResolutionAvailable: boolean;
 }
 
 const componentShortcuts = {
@@ -100,11 +103,14 @@ function PlayerNavigation(props: Props): JSX.Element {
         onInputChange,
         onURLIconClick,
         onCopyFilenameIconClick,
+        onToggleFrameQuality,
         onDeleteFrame,
         onRestoreFrame,
         switchNavigationBlocked,
         switchShowSearchPallet,
         showSearchFrameByName,
+        frameQuality,
+        smartResolutionAvailable,
     } = props;
 
     const [frameInputValue, setFrameInputValue] = useState<number>(frameNumber);
@@ -250,6 +256,27 @@ function PlayerNavigation(props: Props): JSX.Element {
                         <CVATTooltip title='Create frame URL'>
                             <LinkOutlined className='cvat-player-frame-url-icon' onClick={onURLIconClick} />
                         </CVATTooltip>
+                        {smartResolutionAvailable && (
+                            <CVATTooltip title={frameQuality === 'compressed' ? 'Switch to high quality (zip chunks)' : 'Switch to low quality (fast)'}>
+                                <span
+                                    className='cvat-player-frame-quality-toggle'
+                                    onClick={onToggleFrameQuality}
+                                    role='button'
+                                    tabIndex={0}
+                                    aria-label={frameQuality === 'compressed' ?
+                                        'Switch to high quality (zip chunks)' :
+                                        'Switch to low quality (fast)'}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            onToggleFrameQuality();
+                                        }
+                                    }}
+                                >
+                                    {frameQuality === 'compressed' ? 'HQ' : 'LQ'}
+                                </span>
+                            </CVATTooltip>
+                        )}
                         { deleteFrameIcon }
                     </Col>
                 </Row>

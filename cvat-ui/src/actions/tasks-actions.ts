@@ -223,6 +223,8 @@ ThunkAction {
             labels: data.labels,
             image_quality: 70,
             use_zip_chunks: data.advanced.useZipChunks,
+            smart_resolution: data.advanced.smartResolution,
+            smart_resolution_scale: data.advanced.smartResolutionScale,
             use_cache: data.advanced.useCache,
             sorting_method: data.advanced.sortingMethod,
             source_storage: new Storage(data.advanced.sourceStorage ?? { location: StorageLocation.LOCAL }).toJSON(),

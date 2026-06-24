@@ -870,6 +870,7 @@ export interface AnnotationState {
         openTime: null | number;
         labels: Label[];
         requestedId: number | null;
+        smartResolutionAvailable: boolean;
         meta: FramesMetaData | null;
         instance: Job | null | undefined;
         frameNumbers: number[];
@@ -1010,6 +1011,7 @@ export interface PlayerSettingsState {
     canvasBackgroundColor: string;
     frameStep: number;
     frameSpeed: FrameSpeed;
+    frameQuality: 'compressed' | 'original';
     resetZoom: boolean;
     rotateAll: boolean;
     smoothImage: boolean;

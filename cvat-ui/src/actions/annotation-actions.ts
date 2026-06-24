@@ -28,7 +28,7 @@ import {
     Rotation,
     Workspace,
 } from 'reducers';
-import { switchToolsBlockerState } from './settings-actions';
+import { changeFrameQuality, switchToolsBlockerState } from './settings-actions';
 import { updateJobAsync } from './jobs-actions';
 import { loadAudioDataAsync } from './audio-actions';
 
@@ -736,6 +736,7 @@ export function changeFrameAsync(
     fillBuffer?: boolean,
     frameStep?: number,
     forceUpdate?: boolean,
+    explicitQuality?: 'compressed' | 'original',
 ): ThunkAction {
     return async (dispatch: ThunkDispatch, getState: () => CombinedState): Promise<void> => {
         const { jobInstance: job, frame } = receiveAnnotationsParameters();
@@ -758,11 +759,17 @@ export function changeFrameAsync(
                 return;
             }
 
-            if (!isAbleToChangeFrame(toFrame) || statisticsVisible || propagateVisible) {
+            // When an explicit quality is provided (quality toggle), skip the canvas-busy check.
+            // The canvas is always idle here; the check would block the forced re-render.
+            if (!explicitQuality && (!isAbleToChangeFrame(toFrame) || statisticsVisible || propagateVisible)) {
+                return;
+            }
+            if (explicitQuality && (statisticsVisible || propagateVisible)) {
                 return;
             }
 
-            const data = await job.frames.get(toFrame, fillBuffer, frameStep);
+            const frameQuality = explicitQuality ?? state.settings.player.frameQuality;
+            const data = await job.frames.get(toFrame, fillBuffer, frameStep, frameQuality);
 
             dispatch({
                 type: AnnotationActionTypes.CHANGE_FRAME,
@@ -776,7 +783,7 @@ export function changeFrameAsync(
                 count: 1,
             }, true);
 
-            const currentTime = new Date().getTime();
+            const currentTime = Date.now();
             let frameSpeed;
             switch (state.settings.player.frameSpeed) {
                 case FrameSpeed.Fast: {
@@ -987,6 +994,7 @@ export function getJobAsync({
 }): ThunkAction {
     return async (dispatch: ThunkDispatch, getState): Promise<void> => {
         try {
+            const defaultFrameQuality = 'compressed';
             const state = getState();
             const filters = initialFilters;
 
@@ -1011,6 +1019,10 @@ export function getJobAsync({
 
             getCore().config.globalObjectsCounter = 0;
             const [job] = await cvat.jobs.get({ jobID });
+            dispatch(changeFrameQuality(defaultFrameQuality));
+            const smartResolutionAvailable = (
+                job.dataChunkType === 'video' && job.dataOriginalChunkType === 'imageset'
+            );
             let gtJob: Job | null = null;
             if (job.type === JobType.ANNOTATION || job.type === JobType.CONSENSUS_REPLICA) {
                 try {
@@ -1029,7 +1041,12 @@ export function getJobAsync({
                 )) || job.startFrame;
 
             const isAudio = job.dimension === DimensionType.DIMENSION_1D;
-            const frameData = isAudio ? null : await job.frames.get(frameNumber);
+            const frameData = isAudio ? null : await job.frames.get(
+                frameNumber,
+                false,
+                undefined,
+                defaultFrameQuality,
+            );
             const jobMeta = await cvat.frames.getMeta('job', job.id);
             const frameNumbers = await job.frames.frameNumbers();
             if (frameData) {
@@ -1069,6 +1086,7 @@ export function getJobAsync({
                 payload: {
                     openTime,
                     job,
+                    smartResolutionAvailable,
                     frameNumbers,
                     jobMeta,
                     queryParameters,
@@ -1091,7 +1109,7 @@ export function getJobAsync({
                 dispatch(fetchAnnotationsAsync());
             } else {
                 dispatch(fetchAnnotationsAsync());
-                dispatch(changeFrameAsync(frameNumber, false));
+                dispatch(changeFrameAsync(frameNumber, false, undefined, false, defaultFrameQuality));
             }
         } catch (error) {
             dispatch({

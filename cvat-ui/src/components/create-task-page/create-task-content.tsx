@@ -73,6 +73,8 @@ const defaultState: State = {
     subset: '',
     advanced: {
         useZipChunks: true,
+        smartResolution: false,
+        smartResolutionScale: 25,
         useCache: true,
         sortingMethod: SortingMethod.LEXICOGRAPHICAL,
         sourceStorage: {
