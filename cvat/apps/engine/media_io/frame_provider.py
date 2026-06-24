@@ -822,7 +822,7 @@ def prepare_image_chunk(
 
     image_quality = 100 if quality == models.FrameQuality.ORIGINAL else db_data.image_quality
     writer_init_kwargs: dict = {"quality": image_quality, "dimension": db_task.dimension}
-    if writer_class is Mpeg4CompressedChunkWriter:
+    if writer_class in (Mpeg4CompressedChunkWriter, ZipCompressedChunkWriter):
         writer_init_kwargs["downscale_percent"] = _load_smart_resolution_scale(db_data)
     writer = writer_class(**writer_init_kwargs)
 

@@ -1132,12 +1132,18 @@ class ZipChunkWriter(IChunkWriter):
 
 
 class ZipCompressedChunkWriter(ZipChunkWriter):
+    def __init__(self, *, quality: int, dimension: DimensionType, downscale_percent: int = 100) -> None:
+        self._downscale_percent = max(1, min(100, int(downscale_percent)))
+        super().__init__(quality=quality, dimension=dimension)
+
     def _validate_configuration(self):
         assert self._dimension in (DimensionType.DIM_2D, DimensionType.DIM_3D)
 
     @staticmethod
     def _compress_image(
-        source_image: av.VideoFrame | io.IOBase | Image.Image, quality: int
+        source_image: av.VideoFrame | io.IOBase | Image.Image,
+        quality: int,
+        downscale_percent: int = 100,
     ) -> io.BytesIO:
         image = None
         if isinstance(source_image, av.VideoFrame):
@@ -1181,6 +1187,12 @@ class ZipCompressedChunkWriter(ZipChunkWriter):
         if image.mode != "RGB" and image.mode != "L":
             image = image.convert("RGB")
 
+        if downscale_percent < 100:
+            out_w = max(1, image.width * downscale_percent // 100)
+            out_h = max(1, image.height * downscale_percent // 100)
+            resampling = Image.Resampling.BILINEAR if hasattr(Image, "Resampling") else Image.BILINEAR
+            image = image.resize((out_w, out_h), resampling)
+
         buf = io.BytesIO()
         image.save(buf, format="JPEG", quality=quality, optimize=True)
         buf.seek(0)
@@ -1200,7 +1212,11 @@ class ZipCompressedChunkWriter(ZipChunkWriter):
                 if self._dimension == DimensionType.DIM_2D:
                     if compress_frames:
                         try:
-                            image_buf = self._compress_image(image, self._quality)
+                            image_buf = self._compress_image(
+                                image,
+                                self._quality,
+                                self._downscale_percent,
+                            )
                         except Exception as ex:
                             if path is None:
                                 raise

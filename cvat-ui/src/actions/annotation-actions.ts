@@ -1020,9 +1020,7 @@ export function getJobAsync({
             getCore().config.globalObjectsCounter = 0;
             const [job] = await cvat.jobs.get({ jobID });
             dispatch(changeFrameQuality(defaultFrameQuality));
-            const smartResolutionAvailable = (
-                job.dataChunkType === 'video' && job.dataOriginalChunkType === 'imageset'
-            );
+            const smartResolutionAvailable = true;
             let gtJob: Job | null = null;
             if (job.type === JobType.ANNOTATION || job.type === JobType.CONSENSUS_REPLICA) {
                 try {

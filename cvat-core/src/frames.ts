@@ -39,6 +39,7 @@ const frameDataCache: Record<string, {
     getChunk: (chunkIndex: number, quality: ChunkQuality) => Promise<ArrayBuffer>;
     getMeta: () => Promise<FramesMetaData>;
     chunkQuality: ChunkQuality;
+    chunkType: 'video' | 'imageset';
 }> = {};
 
 // frame meta data storage by job id
@@ -956,6 +957,7 @@ export async function getFrame(
             contextCache: {},
             getChunk,
             chunkQuality: quality,
+            chunkType,
             getMeta: () => {
                 const cached = frameMetaCache[jobID];
                 if (!(cached instanceof Promise)) {
@@ -965,10 +967,10 @@ export async function getFrame(
             },
         };
     } else if (frameDataCache[jobID].chunkQuality !== quality) {
-        // The compressed stream is MP4 video; the original stream is a ZIP image set.
-        // The FrameDecoder block type must match the chunk format — replace the decoder.
-        const newBlockType = quality === ChunkQuality.ORIGINAL ? BlockType.ARCHIVE : BlockType.MP4VIDEO;
         const cached = frameDataCache[jobID];
+        const newBlockType = cached.chunkType === 'video'
+            ? (quality === ChunkQuality.ORIGINAL ? BlockType.ARCHIVE : BlockType.MP4VIDEO)
+            : BlockType.ARCHIVE;
         cached.provider.close();
         cached.provider = new FrameDecoder(
             newBlockType,

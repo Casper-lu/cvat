@@ -2181,7 +2181,7 @@ def _create_static_chunks(
         "quality": db_data.image_quality,
         "dimension": db_task.dimension,
     }
-    if compressed_chunk_writer_class is Mpeg4CompressedChunkWriter:
+    if compressed_chunk_writer_class in (Mpeg4CompressedChunkWriter, ZipCompressedChunkWriter):
         compressed_chunk_writer_kwargs["downscale_percent"] = (
             smart_resolution_scale if smart_resolution else 100
         )
